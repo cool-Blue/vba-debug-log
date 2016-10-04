@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- The above 3 meta tags *must* come first in the head; any other head content must come *after* these tags -->    <title>accordion</title>
+    <!-- Latest compiled and minified CSS -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap-theme.min.css" integrity="sha384-rHyoN1iRsVXV4nD0JutlnGaslCJuC7uwjduW9SVrLvRYooPp2bWYgmgJQIXwl/Sp" crossorigin="anonymous">
+    <script src="jquery-1.11.1.js"></script>
+    <!-- Latest compiled and minified JavaScript -->
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
+    <style>
+        .menu .panel-heading {  position: relative; }
+        .menu .green { border-left: 10px solid green; }
+        .menu .collapse.in { overflow: visible; }
+        .pinned > .pin {
+            display: inline-block;
+            position: absolute;
+            background-image: url(img/1475606366_Black_pin.png);
+            background-size: 1em 1em;
+            width: 1em;
+            height: 1em;
+            top: -0.25em;
+            left: 0;
+            content: "";
+            transform: rotate(-30deg);
+        }
+        .green:active:before {
+            transition: All 0.3s ease-in;
+            transform: rotate(-30deg) translateY(0.5em);
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+<div class='menu'>
+    <div id="tree_accordion" class='panel-group'>
+        <!-- CONTENT HERE -->
+    </div>
+</div>
+<script src="logtest.js"></script>
+</body>
+</html>
