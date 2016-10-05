@@ -8,7 +8,7 @@ var group_div =  `<div class='panel panel-default'>
                       <div class='panel-body'>$INNER</div>
                     </div>
                   </div>`;
-var inner_div   =`<div class='panel-default'>
+var inner_div   =`<div class='panel-group'>
                     $CONTENT
                   </div>`;
 
@@ -87,8 +87,12 @@ $(document).ready(function() {
     {id:'level3', title:'LEVEL 3', content:'Level 3 content'}
   ];
 
-  $('#tree_accordion').html(createAccordion(config));
+  var $accordion = $('#tree_accordion').html(createAccordion(config));
 
+  /**
+   *
+   * @param e {event} emitted by
+   */
   function eCollapse (e) {
     var isHover = e.type !== 'click',
       $this = $(this),
@@ -107,14 +111,14 @@ $(document).ready(function() {
       $(target).collapse(option);
 
     } else {
-
       $target.toggleClass('pinned');
       $this.toggleClass('pinned');
-
+      if(e.shiftKey && !$this.hasClass('pinned'))
+        $target.find('.pinned').removeClass('pinned')
     }
   }
-  $(document).on('mouseenter.collapse', '[data-toggle=hcollapse]', eCollapse);
-  $(document).on('mouseout.collapse', '[data-toggle=hcollapse]', eCollapse);
-  $(document).on('click.collapse', '[data-toggle=hcollapse]', eCollapse);
+  $accordion.on('mouseenter', '[data-toggle=hcollapse]', eCollapse);
+  $accordion.on('mouseout', '[data-toggle=hcollapse]', eCollapse);
+  $accordion.on('click', '[data-toggle=hcollapse]', eCollapse);
 
 });
