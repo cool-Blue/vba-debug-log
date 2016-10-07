@@ -1,5 +1,5 @@
 var group_div =  `<div class='panel panel-default'>
-                    <div class='panel-heading green' tabindex="0">
+                    <div class='panel-heading green'>
                       <h4 class='panel-title'>
                       <a href='#$ID' data-toggle='hcollapse' aria-expanded="false" class="collapsed"><span class="pin"></span>$TITLE</a>
                       </h4>
@@ -89,36 +89,44 @@ $(document).ready(function() {
 
   var $accordion = $('#tree_accordion').html(createAccordion(config));
 
+  $('.panel').on('pinchange', function (e, state) {
+    e.stopPropagation();
+    eCollapse.call(this, e, state)
+  });
+
   /**
    *
-   * @param e {event} emitted by
+   * @param e {event} emitted by an accordion control element
+   * @param state {object} defines the type of event
    */
-  function eCollapse (e) {
-    var isHover = e.type !== 'click',
-      $this = $(this),
-      href,
-      target = $this.attr('data-target')
-        || e.preventDefault()
-        || (href = $this.attr('href'))
-        && href.replace(/.*(?=#[^\s]+$)/, ''), //strip for ie7,
-      $target = $(target),
-      option;
+  function eCollapse (e, state) {
+    var isHover = state.type !== 'click',
+      $panel = $(this),
+      $panelTitle = $(e.target),
+      collapse = $panel.children('.panel-collapse'),
+      $collapse = $(collapse);
 
     if(isHover){
-      if($target.hasClass('pinned')) return;
-      option = $target.hasClass('in') ? 'hide' : "show";
-      $('.panel-collapse').not(target).not('.pinned').collapse("hide");
-      $(target).collapse(option);
+      if($collapse.hasClass('pinned')) return;
+      $('.panel .panel-collapse').not(collapse).not('.pinned').collapse("hide");   // clean up
+      $collapse.collapse($collapse.hasClass('in') ? 'hide' : "show");
 
     } else {
-      $target.toggleClass('pinned');
-      $this.toggleClass('pinned');
-      if(e.shiftKey && !$this.hasClass('pinned'))
-        $target.find('.pinned').removeClass('pinned')
+      $collapse.toggleClass('pinned');
+      $panelTitle.toggleClass('pinned')
+        .find('.pin').toggleClass('in');
+      if(state.shiftKey && !$panelTitle.hasClass('pinned'))
+        $collapse.find('.pinned').removeClass('pinned')
+          .find('.pin').removeClass('in');
     }
   }
-  $accordion.on('mouseenter', '[data-toggle=hcollapse]', eCollapse);
-  $accordion.on('mouseout', '[data-toggle=hcollapse]', eCollapse);
-  $accordion.on('click', '[data-toggle=hcollapse]', eCollapse);
+  function ePin (e) {
+    e.stopPropagation();
+    e.preventDefault();
+    $(this).trigger(`pinchange`, {type: e.type, shiftKey: e.shiftKey})
+  }
+  $accordion.on('mouseenter', '[data-toggle=hcollapse]', ePin);
+  $accordion.on('mouseout', '[data-toggle=hcollapse]', ePin);
+  $accordion.on('click', '[data-toggle=hcollapse]', ePin);
 
 });

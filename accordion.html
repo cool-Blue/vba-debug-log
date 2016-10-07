@@ -15,7 +15,7 @@
         .menu .panel-heading {  position: relative; }
         .menu .green { border-left: 10px solid green; }
         .menu .collapse.in { overflow: visible; }
-        .pinned > .pin {
+        .pin {
             display: inline-block;
             position: absolute;
             background-image: url(img/1475606366_Black_pin_vert.png);
@@ -24,7 +24,14 @@
             height: 1em;
             top: -0.25em;
             left: 0;
+            opacity: 0;
+            transition: opacity 0s 0.2s, top 0.2s cubic-bezier(0.95, 0.05, 0.795, 0.035);
             content: "";
+        }
+        .pin.in  {
+            opacity: 1;
+            top: 0.25em;
+            transition: opacity 0s, top 0.2s cubic-bezier(0.19, 1, 0.22, 1);
         }
     </style>
 </head>
@@ -37,3 +44,4 @@
 <script src="logtest.js"></script>
 </body>
 </html>
+
