@@ -1,14 +1,16 @@
-var group_div =  `<div class='panel panel-default'>
+var group_div =  `<div class='panel panel-warn'>
                     <div class='panel-heading green'>
-                      <h4 class='panel-title'>
-                      <a href='#$ID' data-toggle='hcollapse' aria-expanded="false" class="collapsed"><span class="pin"></span>$TITLE</a>
-                      </h4>
+                      <span class='panel-title'>
+                        <a href='#' data-toggle='hcollapse' aria-expanded="false" class="collapsed">
+                          <span class="pin"></span><span class="timestamp">$ID</span>$TITLE
+                        </a>
+                      </span>
                     </div>
-                    <div class='panel-collapse collapse' id='$ID'>
+                    <div class='panel-collapse collapse'>
                       <div class='panel-body'>$INNER</div>
                     </div>
                   </div>`;
-var inner_div   =`<div class='panel-group'>
+var inner_div   =`<div class='panel-group panel-title'>
                     $CONTENT
                   </div>`;
 

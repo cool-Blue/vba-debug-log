@@ -12,8 +12,18 @@
     <!-- Latest compiled and minified JavaScript -->
     <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
     <style>
+        .timestamp {
+            margin-right: 1em;
+            position: relative;
+            left: 0;
+        }
+        .menu .panel, .menu .panel-group, .menu .panel-heading,
+        .menu .panel-body {
+            margin-left: 0;
+            padding-left: 0;
+        }
         .menu .panel-heading {  position: relative; }
-        .menu .green { border-left: 10px solid green; }
+        /*.menu .green { border-left: 10px solid green; }*/
         .menu .collapse.in { overflow: visible; }
         .pin {
             display: inline-block;
@@ -32,6 +42,10 @@
             opacity: 1;
             top: 0.25em;
             transition: opacity 0s, top 0.2s cubic-bezier(0.19, 1, 0.22, 1);
+        }
+        .timestamp {
+            display: inline-block;
+            float: left;
         }
     </style>
 </head>
