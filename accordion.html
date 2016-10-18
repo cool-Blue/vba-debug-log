@@ -20,10 +20,12 @@
         .menu .panel, .menu .panel-group, .menu .panel-heading,
         .menu .panel-body {
             margin-left: 0;
-            padding-left: 0;
+            padding: 0;
+        }
+        .menu .panel-group {
+            margin-bottom: 0;
         }
         .menu .panel-heading {  position: relative; }
-        /*.menu .green { border-left: 10px solid green; }*/
         .menu .collapse.in { overflow: visible; }
         .pin {
             display: inline-block;
@@ -32,25 +34,24 @@
             background-size: 1em 1em;
             width: 1em;
             height: 1em;
-            top: -0.25em;
+            top: -0.35em;
             left: 0;
             opacity: 0;
-            transition: opacity 0s 0.2s, top 0.2s cubic-bezier(0.95, 0.05, 0.795, 0.035);
+            transition: opacity 0s 0.5s, top 0.5s cubic-bezier(0.95, 0.05, 0.795, 0.035);
             content: "";
         }
         .pin.in  {
             opacity: 1;
-            top: 0.25em;
-            transition: opacity 0s, top 0.2s cubic-bezier(0.19, 1, 0.22, 1);
+            top: 0;
+            transition: opacity 0s, top 0.3s cubic-bezier(0.19, 1, 0.22, 1);
         }
         .timestamp {
-            display: inline-block;
-            float: left;
+            margin-left: 1em;
         }
     </style>
 </head>
 <body>
-<div class='menu'>
+<div class='menu container-fluid'>
     <div id="tree_accordion" class='panel-group'>
         <!-- CONTENT HERE -->
     </div>

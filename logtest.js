@@ -1,9 +1,14 @@
-var group_div =  `<div class='panel panel-warn'>
-                    <div class='panel-heading green'>
+var group_div =  `<div class='panel panel-info container'>
+                    <div class='panel-heading'>
                       <span class='panel-title'>
-                        <a href='#' data-toggle='hcollapse' aria-expanded="false" class="collapsed">
-                          <span class="pin"></span><span class="timestamp">$ID</span>$TITLE
-                        </a>
+                        <div data-toggle='hcollapse' aria-expanded="false" class="collapsed">
+                          <span class="pin"></span>
+                          <span class="timestamp">$TIMESTAMP</span>
+                          <span class="caller" style="margin-left: $INDENTem">$CALLER</span>
+                          <span class="context">$CONTEXT</span>
+                          <span class="message">$MESSAGE</span>
+                          <span class="dt">$DT</span>
+                        </div>
                       </span>
                     </div>
                     <div class='panel-collapse collapse'>
@@ -13,24 +18,23 @@ var group_div =  `<div class='panel panel-warn'>
 var inner_div   =`<div class='panel-group panel-title'>
                     $CONTENT
                   </div>`;
-
-var app = [
-  {id: '17:15:58:738', title: 'caller', context: 'START', message: 'message', dt: 'time', levels:
-  [
-    {id: '17:15:58:739', title: 'caller', context: 'START', message: 'message', dt: 'time', levels:
-      [
-        {id: '17:15:58:739', context: 'REPORT', message: 'message', dt: 'time'},
-        {id: '17:15:58:741', context: 'REPORT', message: 'message', dt: 'time'},
-        {id: '17:15:58:739', context: 'REPORT', message: 'message', dt: 'time'},
-        {id: '17:15:58:741', context: 'END', message: 'message', dt: 'time'}
-      ]
-    },
-    {id: '17:15:58:741', context: 'REPORT', message: 'message', dt: 'time'},
-    {id: '17:15:58:741', context: 'REPORT', message: 'message', dt: 'time'},
-    {id: '17:15:58:742', context: 'REPORT', message: 'message', dt: 'time'},
-    {id: '17:15:58:743', context: 'END', message: 'message', dt: 'time'}
-  ]}
-];
+var report_div = `<div>
+                    <span class="timestamp">$TIMESTAMP</span>
+                    <div style="display: inline-block; margin-left: $INDENTem">
+                      <span class="context">$CONTEXT</span>
+                      <span class="message">$MESSAGE</span>
+                    </div>
+                    <span class="dt pull-right">$DT</span>
+                  </div>`;
+var end_div = `<div class="panel-info"><div class="panel-heading">
+                    <span class="timestamp">$TIMESTAMP</span>
+                    <div style="display: inline-block; margin-left: $INDENTem">
+                      <span class="context">$CALLER</span>
+                      <span class="context">$CONTEXT</span>
+                      <span class="message">$MESSAGE</span>
+                    </div>
+                    <span class="dt pull-right">$DT</span>
+                  </div></div>`;
 
 /**
  * Creates a nested multi level and collapsible menu with accordion
@@ -38,11 +42,11 @@ var app = [
  *  - An array with JSON configurations for the nested menu accordion
  *  - Example:
  *  config = [
- *              {id:'level1', title:'LEVEL 1', levels:
+ *              {id:'level1', title:'LEVEL 1', steps:
  *                  [
  *                      {id:'level1-1', title:'LEVEL 1-1', content:'text'},
  *                      {id:'level1-2', title:'LEVEL 1-2', content:'text'},
- *                      {id:'level1-2', title:'LEVEL 1-2', levels: [ ... ]}
+ *                      {id:'level1-2', title:'LEVEL 1-2', steps: [ ... ]}
  *                  ]
  *              },
  *              // Deepest element must contain "content" data to visualize
@@ -50,16 +54,19 @@ var app = [
  *              {id:'levelN', title:'LEVEL N', content:'MY CONTENT'}
  *           ]
  */
-function createAccordion(config){
+function createAccordion(config, depth = 0){
   var content = '';
-  config.forEach(function(level) {
-    var subcontent  = group_div.replace(/\$ID/g, level.id)
-      .replace('$TITLE', level.title);
+  config.forEach(function(call, i, calls) {
+    var subcontent  = ['TIMESTAMP', 'CALLER', 'CONTEXT', 'MESSAGE', 'DT']
+      .reduce((group, part) => {
+        return group.replace(`$${part}`, call[part.toLowerCase()] || '')
+      }, call.steps ? group_div : call.context === 'END' ? end_div : report_div)
+      .replace('$INDENT', call.context === 'END' ? depth -1 : depth);
 
-    subcontent = subcontent.replace('$INNER',
-      inner_div.replace('$CONTENT', typeof level.levels == 'object'
-        ? createAccordion(level.levels)
-        : level.content));
+    if(call.steps) {
+      subcontent = subcontent.replace('$INNER',
+        inner_div.replace('$CONTENT', createAccordion(call.steps, depth + 1)));
+    }
 
     content = content + subcontent;
   });
@@ -67,32 +74,37 @@ function createAccordion(config){
 }
 $(document).ready(function() {
 
-  config = [
-    {id:'level1', title:'LEVEL 1', levels:
+  var config = [
+    {timestamp: '17:15:58:738', caller: 'root', context: 'CALL', message: 'message', steps:
       [
-        {id:'level1-1', title:'LEVEL 1.1', levels:
+        {timestamp: '17:15:58:741', context: 'REPORT', message: 'message1', dt: 'time'},
+        {timestamp: '17:15:58:741', context: 'REPORT', message: 'message1', dt: 'time'},
+        {timestamp: '17:15:58:739', caller: 'sub', context: 'CALL', message: 'message', steps:
           [
-            {
-              id:'level1-1-1',
-              title:'LEVEL 1.1.1',
-              content:'Level 1.1.1 content'
+            {timestamp: '17:15:58:739', context: 'REPORT', message: 'message1 message1 message1 message1 message1', dt: 'time'},
+            {timestamp: '17:15:58:741', context: 'REPORT', message: 'message2', dt: 'time'},
+            {timestamp: '17:15:58:739', caller: 'sub', context: 'CALL', message: 'message', steps:
+              [
+                {timestamp: '17:15:58:739', context: 'REPORT', message: 'message1', dt: 'time'},
+                {timestamp: '17:15:58:741', context: 'REPORT', message: 'message2', dt: 'time'},
+                {timestamp: '17:15:58:739', context: 'REPORT', message: 'message3', dt: 'time'},
+                {timestamp: '17:15:58:741', context: 'END', message: 'end', dt: 'time'}
+              ]
             },
-            {
-              id:'level1-1-2',
-              title:'LEVEL 1.1.2',
-              content:'Level 1.1.2 content'
-            }
-          ]},
-        {id:'level1-2', title:'LEVEL 1.2', content:'Level 1.2 content'}
-      ]},
-    {id:'level2', title:'LEVEL 2', content:'Level 2 content'},
-    {id:'level3', title:'LEVEL 3', content:'Level 3 content'}
+            {timestamp: '17:15:58:739', context: 'REPORT', message: 'message3', dt: 'time'},
+            {timestamp: '17:15:58:741', context: 'END', message: 'end', dt: 'time'}
+          ]
+        },
+        {timestamp: '17:15:58:742', context: 'REPORT', message: 'message1', dt: 'time'},
+        {timestamp: '17:15:58:743', context: 'END', message: 'end', dt: 'time'}
+      ]}
   ];
 
   var $accordion = $('#tree_accordion').html(createAccordion(config));
 
   $('.panel').on('pinchange', function (e, state) {
     e.stopPropagation();
+    e.preventDefault();
     eCollapse.call(this, e, state)
   });
 
