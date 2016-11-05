@@ -6,8 +6,8 @@ Attribute VB_Name = "cDebugReporter"
 Attribute VB_GlobalNameSpace = False
 Attribute VB_Creatable = False
 Attribute VB_PredeclaredId = False
-Attribute VB_Exposed = False
-Option Explicit
+Attribute VB_Exposed = True
+'Option Explicit
 '//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 '/ Maintains a global call stack
 '/ Requires
@@ -38,23 +38,39 @@ Option Explicit
 '/   Eliminated all outboard dependencies: now independent
 '/   Error messages put on a seperate line
 '//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 Public Enum eNewLine
-    No
-    Before
-    after
-    both
-    Auto
+  No
+  Before
+  after
+  both
+  Auto
 End Enum
 
-Private Const mDTCOL As Long = 80
+Enum logEdge
+  callProc
+  logReport
+  ExitProc
+End Enum
+
+Private Const jsonMessage As String = "{ ""newLine"": ""@newLine"", ""callDepth"": ""@callDepth"", ""edge"": ""@edge"", ""caller"":  ""@caller"", ""timestamp"":  ""@timestamp"", ""context"":  ""@context"", ""message"":  ""@message"", ""error"":  ""@error"", ""dt"":  ""@dt"" }"
+Dim msgDict As Object
+
+Private Const mDTCOL As Long = 90
 Private Const TABSTOP As String = " "
 
+Private mLogTo As eLogTo
+Private mTransport As eTransport
+Private mToImmediate As Boolean
 Private mLevel As Long
 Private mFirstReport As Boolean
 Private startTime As Double, lapTime As Double
 Private mCaller As String
 Private mContext As String
 Public ExitMessage As String
+
+Private mCalldepth As Integer
+Private mLocalEnabled As Boolean
 
 Private Declare PtrSafe Sub GetLocalTime Lib "kernel32" (lpSystemTime As SYSTEMTIME)
 
@@ -96,157 +112,260 @@ Function setCol(S1 As String, S2 As String, s2Col As Long, Optional divider As S
     End If
     
 End Function
-Public Function timeStamp(Optional d As Double = 0) As String
+Public Function timestamp(Optional d As Double = 0) As String
 Dim errorMessage As String
-    If Err.number <> 0 Then
-        errorMessage = "ERROR: " & Err.number & ": " & Err.Description
+    If Err.Number <> 0 Then
+        errorMessage = "ERROR: " & Err.Number & ": " & Err.Description
         Err.clear
     End If
     
     If d = 0 Then
-      timeStamp = sysTime
+      timestamp = sysTime
     Else
-      timeStamp = Format(Hour(d), "00") & ":" & Format(Minute(d), "00") & ":" & Format(Second(d), "00") & ":"
+      timestamp = Format(Hour(d), "00") & ":" & Format(Minute(d), "00") & ":" _
+                  & Format(Second(d), "00") & ":"
     End If
     
 End Function
-Public Sub Report(Optional Message As String, Optional d As Double = 0, Optional caller As String, Optional Context As String, _
-                            Optional newLine As eNewLine = Auto)
+Public Sub Report(Optional message As String, Optional d As Double = 0, _
+                  Optional caller As String, Optional context As String, _
+                  Optional newLine As eNewLine = Auto)
 Attribute Report.VB_UserMemId = 0
 '^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 'Default value: Edit in Notepad to see this.
 'Attribute Report.VB_UserMemId = 0
 
-  If gcDebugMode Then
+  If gcDebugMode And mLocalEnabled Then
     
     Dim myContext As String
-    Dim logText As String
+    Dim logtext As String
     Dim dt As String
     Dim edge As Boolean
+    Dim output As String
+    Dim printed As Boolean
+    
+    msgDict("message") = message
     
     Dim errorMessage As String
-        If Err.number <> 0 Then
-            errorMessage = "ERROR: " & Err.number & ": " & Err.Description
-            Err.clear
+    If Err.Number <> 0 Then
+        errorMessage = "ERROR: " & Err.Number & ": " & Err.Description
+        Err.clear
+    End If
+    
+    ' persist the caller name
+    If Len(caller) <> 0 Then mCaller = caller
+    
+    msgDict("caller") = mCaller
+    msgDict("edge") = logEdge.logReport
+    
+    ' automatically creat context for START report
+    ' otherwise use passed in context if any
+    If Len(context) = 0 Then
+        If mFirstReport And Len(caller) > 0 Then
+            myContext = "START"
+            msgDict("edge") = logEdge.callProc
         End If
-        
-        ' persist the caller name
-        If Len(caller) <> 0 Then mCaller = caller
-        
-        ' automatically creat context for START report
-        ' otherwise use passed in context if any
-        If Len(Context) = 0 Then
-            If mFirstReport And Len(caller) > 0 Then
-                myContext = "START"
-            End If
-        Else
-            mContext = Context
-            myContext = mContext
-        End If
-        
-        ' log elapsed time since previous report unless END report
-        ' for END report, log total procedure time
-        If Context = "END" Then
-          dt = FormatNumber(MicroTimer - startTime, 6)
-          gDebugMargin = True
-        Else
-          dt = IIf(mFirstReport Or Len(mCaller) = 0, "", FormatNumber(MicroTimer - lapTime, 6))
-        End If
-        
-        ' manage spacing between procedures
-        If newLine = Auto Then newLine = IIf(mFirstReport And gCallDepth = 1 _
-                                              Or mFirstReport And Not gDebugMargin, Before, _
-                                              IIf(Context = "END", after, No))
-        If mFirstReport Then gDebugMargin = False
-        
-        logText = timeStamp(d) & String(gCallDepth, TABSTOP)
-        
-        'tag START and END reports with mCaller
-        
-        caller = IIf(mFirstReport And Len(mCaller) > 0 Or Context = "END", mCaller, _
-                                        String(Len(mCaller), " "))
+    Else
+        mContext = context
+        myContext = mContext
+    End If
+    
+    msgDict("context") = mContext
+    
+    ' log elapsed time since previous report unless END report
+    ' for END report, log total procedure time
+    If context = "END" Then
+      dt = FormatNumber(MicroTimer - startTime, 6)
+      gDebugMargin = True
+      msgDict("edge") = logEdge.ExitProc
+    Else
+      dt = IIf(mFirstReport Or Len(mCaller) = 0, "", FormatNumber(MicroTimer - lapTime, 6))
+    End If
+    msgDict("dt") = dt
+    
+    ' manage spacing between procedures
+    If newLine = Auto Then newLine = IIf(mFirstReport And callDepth = 1 _
+                                          Or mFirstReport And Not gDebugMargin, Before, _
+                                          IIf(context = "END", after, No))
+    If mFirstReport Then gDebugMargin = False
+    
+    msgDict("newLine") = newLine
+    
+    msgDict("timestamp") = timestamp(d)
+    logtext = msgDict("timestamp") & String(callDepth(), TABSTOP)
+    
+    'tag START and END reports with mCaller
+    
+    caller = IIf(mFirstReport And Len(mCaller) > 0 Or context = "END", mCaller, _
+                                    String(Len(mCaller), " "))
                                         
-    edge = mFirstReport And Len(mCaller) > 0 Or Context = "END"
+    edge = mFirstReport And Len(mCaller) > 0 Or context = "END"
         
     If Len(caller) <> 0 Then
-      logText = logText & caller
+      logtext = logtext & caller
       
-      If Len(myContext) <> 0 Then logText = logText & ":" & TABSTOP & myContext
-      If Len(Message) <> 0 Then logText = logText & IIf(Len(myContext) = 0, ":" & TABSTOP, TABSTOP) & Message
+      If Len(myContext) <> 0 Then logtext = logtext & ":" & TABSTOP & myContext
+      If Len(message) <> 0 Then logtext = logtext & IIf(Len(myContext) = 0, ":" & TABSTOP, TABSTOP) & message
       
     Else
     
-      If Len(myContext) <> 0 Then logText = logText & TABSTOP & myContext
-      If Len(Message) <> 0 Then logText = logText & TABSTOP & Message
-      
+      If Len(myContext) <> 0 Then logtext = logtext & TABSTOP & myContext
+      If Len(message) <> 0 Then logtext = logtext & TABSTOP & message
+    
     End If
         
     If Len(dt) <> 0 Then
       If Len(errorMessage) <> 0 Then
-        errorMessage = sysTime & String(gCallDepth, "*") & errorMessage
+        errorMessage = sysTime & String(callDepth, "*") & errorMessage
         errorMessage = errorMessage & setCol(errorMessage, dt, mDTCOL)
-        logText = logText & vbNewLine & errorMessage
+        logtext = logtext & vbNewLine & errorMessage
       Else
-        logText = logText & setCol(logText, dt, mDTCOL)
+        logtext = logtext & setCol(logtext, dt, mDTCOL)
       End If
     Else
       If Len(errorMessage) <> 0 Then
-        errorMessage = sysTime & String(gCallDepth, "*") & errorMessage
-        logText = logText & vbNewLine & errorMessage
+        errorMessage = sysTime & String(callDepth, "*") & errorMessage
+        logtext = logtext & vbNewLine & errorMessage
       End If
     End If
-            
-        Select Case newLine
-        Case Before
-            logText = Chr(10) & logText
-        Case after
-            logText = logText & Chr(10)
-        Case both
-            logText = Chr(10) & logText & Chr(10)
-        Case Else
-        End Select
-                
-        ' reset the lap timer
-        lapTime = MicroTimer
-
-        mFirstReport = False
-        
-        ' direct output
-        If debugSaveToFile Then
-          On Error GoTo writeErr
-          If (newLine = Before Or newLine = both) Then debugLog.WriteLine
-          debugLog.WriteLine logText
-          If (newLine = after Or newLine = both) Then debugLog.WriteLine
-        Else
-          Debug.Print logText
-          glogger.log logText
-        End If
-  End If
     
+    msgDict("message") = message
+    msgDict("error") = errorMessage
+    msgDict("callDepth") = callDepth
+
+            
+    Select Case newLine
+    Case Before
+        logtext = Chr(10) & logtext
+    Case after
+        logtext = logtext & Chr(10)
+    Case both
+        logtext = Chr(10) & logtext & Chr(10)
+    Case Else
+    End Select
+            
+    ' reset the lap timer
+    lapTime = MicroTimer
+
+    mFirstReport = False
+    
+    If mToImmediate Then
+      Debug.Print logtext
+      Exit Sub
+    End If
+    
+    ' direct output
+    Select Case transport
+    Case Text
+      output = logtext
+    Case json
+      output = toJson(msgDict)
+    Case Else
+    End Select
+    
+    If Not gDispatcher Is Nothing Then
+      If gDispatcher.Hooked Then
+        gDispatcher.log output
+      Else
+        logFallback printed, logtext
+      End If
+    Else
+      logFallback printed, logtext
+    End If
+            
+    On Error GoTo writeError
+      writeToFile output, newLine
+    On Error GoTo 0
+      
+  End If
+  
+  Exit Sub
+  
+writeError:
+  logFallback printed, logtext
+  On Error Resume Next
+  Resume Next
+End Sub
+Sub logFallback(ByRef printed As Boolean, logtext As String)
+  If Not printed And gToImmediate Then Debug.Print logtext
+  printed = True
+End Sub
+Sub writeToFile(logtext As String, newLine As eNewLine)
+
+  If Not TypeName(debugLog) = "Empty" Then
+    If Not debugLog Is Nothing Then
+      If (newLine = Before Or newLine = both) Then debugLog.writeLine
+      debugLog.writeLine logtext
+      If (newLine = after Or newLine = both) Then debugLog.writeLine
+    Else
+      Err.Raise "logstream not initialised"
+    End If
+  End If
   Exit Sub
     
-' print to immediate window if the write to file fails
-writeErr:
-    Debug.Print logText
 End Sub
-Property Let Context(RHS As String)
+Private Function toJson(msgDict As Dictionary) As String
+  Dim ret As String, p
+  ret = jsonMessage
+
+  For Each p In msgDict
+    ret = Replace(ret, "@" & p, msgDict(p))
+  Next p
+  
+  toJson = ret
+  
+End Function
+Property Let ToImmediate(RHS As Boolean)
+  mToImmediate = RHS
+End Property
+Property Get ToImmediate() As Boolean
+  ToImmediate = mToImmediate Or gToImmediate()
+End Property
+Property Let transport(t As eTransport)
+  mTransport = t
+End Property
+Property Get transport() As eTransport
+  If mTransport = eTransport.noop Then transport = gTransport Else transport = mTransport
+End Property
+Property Let context(RHS As String)
     mContext = RHS
 End Property
+Public Sub persist(Optional enabled As Boolean = True)
+  mCalldepth = gCallDepth
+  gCallDepth = gCallDepth - 1
+  localEnabled enabled
+End Sub
+Public Sub localEnabled(enabled As Boolean)
+  mLocalEnabled = enabled
+End Sub
+Private Function callDepth()
+  If mCalldepth < 0 Then callDepth = gCallDepth Else callDepth = mCalldepth
+End Function
 Private Sub Class_Initialize()
-    If Not gcDebugMode Then Exit Sub
-    
-    gCallDepth = gCallDepth + 1
-    mFirstReport = True
-    startTime = MicroTimer
-    lapTime = startTime
+
+  If Not gcDebugMode Then Exit Sub
+  
+  mLocalEnabled = True
+  
+  Set msgDict = CreateObject("scripting.dictionary")
+  
+  mTransport = eTransport.noop
+  mLogTo = eLogTo.noop
+  
+  mCalldepth = -1
+  gCallDepth = gCallDepth + 1
+  mFirstReport = True
+  startTime = MicroTimer
+  lapTime = startTime
+  
 End Sub
 Private Sub Class_Terminate()
-    If Not gcDebugMode Then Exit Sub
-    
-    mContext = "END"
-    Report Context:="END", Message:=ExitMessage
-    startTime = MicroTimer
-    gCallDepth = gCallDepth - 1
+  If Not gcDebugMode Then Exit Sub
+  
+  mContext = "END"
+  Report context:="END", message:=ExitMessage
+  startTime = MicroTimer
+  If mCalldepth < 0 Then gCallDepth = gCallDepth - 1
 End Sub
 
 

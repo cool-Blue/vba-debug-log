@@ -7,18 +7,30 @@ Attribute VB_GlobalNameSpace = False
 Attribute VB_Creatable = False
 Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = False
+Option Explicit
 '---------------------------------------------------------------------------------------
 ' Module    : cWin32
 ' Author    : Admin
 ' Date      : 13-Oct-16
 ' Purpose   :
+' todo
+'   declare chainable functions as explicit type
 '---------------------------------------------------------------------------------------
 Const myName As String = "cWin32"
+Const LogMode = False
+
+#If Win64 Then
+  Const PTR_LENGTH As Long = 8
+#Else
+  Const PTR_LENGTH As Long = 4
+#End If
+
 Private Type COPYDATASTRUCT
-         dwData As LongPtr
-         cbData As LongPtr
-         lpData As LongPtr
- End Type
+  dwData As LongPtr
+  cbData As LongPtr
+  lpData As LongPtr
+End Type
+
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' used by FormatMessage
 '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
@@ -37,24 +49,31 @@ Private Const WM_QUIT As Long = &H12
 Private Const WM_DESTROY As Long = &H2
 Private Const WM_COPYDATA As Long = &H4A
 Private Const WM_SETFOCUS As Long = &H7
-Private Const VBA_PRINT As Long = &H401
-Private Const VBA_EOF As Long = &H402
-Private Const VBA_LOGGING As Long = &H403
-Private Const VBA_CLEAR As Long = &H404
+Private Const WM_SYSCOMMAND As Long = &H112
+Private Const WM_IME_SETCONTEXT As Long = 641
+Private Const WM_IME_NOTIFY As Long = 642
+Private Const SC_RESTORE As Integer = &HF120
+Private Const SC_DEFAULT As Integer = &HF160
+Private Const SC_MAXIMIZE As Integer = &HF030
+
+Private Const VBA_REQ_FOREGROUND As Long = &H401
+
 Private Const SW_RESTORE As Integer = 9
+Private Const SW_SHOWDEFAULT As Integer = 10
+Private Const SW_SHOW As Integer = 5
 Private Const SW_SHOWNORMAL As Integer = 1
 
 Private Declare Function FormatMessage Lib "kernel32.dll" Alias "FormatMessageA" ( _
-    ByVal dwFlags As Long, _
-    ByRef lpSource As Any, _
-    ByVal dwMessageId As Long, _
-    ByVal dwLanguageId As Long, _
-    ByVal lpBuffer As String, _
-    ByVal nSize As Long, _
-    ByRef Arguments As Long) As Long
+                          ByVal dwFlags As Long, _
+                          ByRef lpSource As Any, _
+                          ByVal dwMessageId As Long, _
+                          ByVal dwLanguageId As Long, _
+                          ByVal lpBuffer As String, _
+                          ByVal nSize As Long, _
+                          ByRef Arguments As Long) As Long
 
 Private Declare PtrSafe Function GetWindow Lib "User32" ( _
-                          ByVal HWnd As LongPtr, _
+                          ByVal hWnd As LongPtr, _
                           ByVal wCmd As LongPtr) As LongPtr
 Private Declare PtrSafe Function FindWindow Lib "User32" Alias "FindWindowA" ( _
                           ByVal lpClassName As String, _
@@ -64,105 +83,166 @@ Private Declare PtrSafe Function FindWindowEx Lib "User32" Alias "FindWindowExA"
                           ByVal hWnd2 As LongPtr, _
                           ByVal lpsz1 As String, _
                           ByVal lpsz2 As String) As LongPtr
-Private Declare Function PostMessage Lib "User32" Alias "PostMessageA" ( _
-                          ByVal HWnd As LongPtr, _
-                          ByVal wMsg As LongPtr, _
-                          ByVal WParam As Any, _
-                          ByVal LParam As Any) As LongPtr
-Private Declare PtrSafe Function SendMessage Lib "User32" Alias "SendMessageA" ( _
-                          ByVal HWnd As LongPtr, _
-                          ByVal wMsg As LongPtr, _
-                          ByVal WParam As LongPtr, _
-                          ByVal LParam As LongPtr) As LongPtr
-Private Declare PtrSafe Function ActivateWindow Lib "User32" Alias "SetForegroundWindow" ( _
-                          ByVal HWnd As LongPtr) As Boolean
-
-Private Declare PtrSafe Function GetWindowTextLength Lib "User32" Alias "GetWindowTextLengthA" (ByVal HWnd As LongPtr) As LongPtr
+Private Declare PtrSafe Function GetWindowTextLength Lib "User32" Alias "GetWindowTextLengthA" (ByVal hWnd As LongPtr) As LongPtr
 Private Declare PtrSafe Function getWindowText Lib "User32" Alias "GetWindowTextA" ( _
-                          ByVal HWnd As LongPtr, ByVal lpString As String, _
+                          ByVal hWnd As LongPtr, ByVal lpString As String, _
                           ByVal cch As LongPtr) As LongPtr
 
-Private Declare Function ShowWindow Lib "User32" ( _
-                          ByVal HWnd As LongPtr, _
-                          ByVal nCmdShow As Integer) As Boolean
+
+Private Declare Function PostMessage Lib "User32" Alias "PostMessageA" ( _
+                          ByVal hWnd As LongPtr, _
+                          ByVal wMsg As LongPtr, _
+                          ByVal wParam As Any, _
+                          ByVal lParam As Any) As LongPtr
+Private Declare PtrSafe Function SendMessage Lib "User32" Alias "SendMessageA" ( _
+                          ByVal hWnd As LongPtr, _
+                          ByVal wMsg As LongPtr, _
+                          ByVal wParam As LongPtr, _
+                          ByVal lParam As LongPtr) As LongPtr
+
+Private Declare PtrSafe Function SetForegroundWindow Lib "User32" ( _
+                          ByVal hWnd As LongPtr) As Boolean
+Private Declare PtrSafe Function SetFocus Lib "User32" ( _
+                          Optional ByVal hWnd As LongPtr) As LongPtr
+Private Declare PtrSafe Function SetActiveWindow Lib "User32" ( _
+                          Optional ByVal hWnd As LongPtr) As LongPtr
 
 'Copies a block of memory from one location to another.
 Private Declare Sub CopyMemory Lib "kernel32" Alias "RtlMoveMemory" ( _
-                            hpvDest As Any, _
-                            hpvSource As Any, _
-                            ByVal cbCopy As Long)
+                          hpvDest As Any, _
+                          hpvSource As Any, _
+                          ByVal cbCopy As Long)
    
+Public mUseLogger As Boolean
+
 Private mhWndOwner As LongPtr
 Private mhWndTarget As LongPtr
 Private mContent As String
+Private db As cDebugReporter
 Private mLogging As Boolean
-
-Public Function title(t As String)
-  mhWndTarget = getHwnd(t)
-  Debug.Print mhWndTarget
-
-  Set title = Me
-End Function
-Property Get HWnd() As LongPtr
-  HWnd = mhWndTarget
+Private mlastError As String
+'/////////////////////////////////////////////////////////////////////////////////////////////////////
+'// window handling                                                                               //
+'/////////////////////////////////////////////////////////////////////////////////////////////////////
+Property Get hWnd() As LongPtr
+  hWnd = mhWndTarget
 End Property
 Property Get hwndX() As String
   hwndX = "0x" & Hex(mhWndTarget)
 End Property
-Private Function getHwnd(title As String) As LongPtr
-  getHwnd = FindWindow(vbNullString, title)
+Property Get hWndOwner() As LongPtr
+  hWndOwner = mhWndOwner
+End Property
+Property Get Hooked() As Boolean
+  Hooked = mhWndTarget <> 0
+End Property
+Public Function hook(t As String)
+Const pName As String = "cWin32.hook"
+  mhWndTarget = getHwnd(t)
+  Set hook = Me
 End Function
-Public Function post(msg As LongPtr, p1 As LongPtr, p2 As LongPtr)
-Const pName As String = "cWin32.post"
-  If mhWndTarget <> 0 Then
-    PostMessage mhWndTarget, msg, p1, p2
-  End If
-  Set post = Me
-End Function
-Public Function send(msg As LongPtr, p1 As LongPtr, p2 As LongPtr)
-Const pName As String = "cWin32.send"
-  If mhWndTarget <> 0 Then
-    mContent = content
-    SendMessage mhWndTarget, msg, p1, p2
-  End If
-  Set send = Me
-End Function
-Public Function activateLog()
-  ShowWindow mhWndTarget, SW_RESTORE
-  Set activateLog = Me
-End Function
-Public Function log(content As String)
-Const pName As String = "cWin32.log"
-Dim cds As COPYDATASTRUCT
-Dim buf(1 To 255) As Byte
-
-  Call CopyMemory(buf(1), ByVal content, Len(content))
-  cds.dwData = 3
-  cds.cbData = Len(content) + 0
-  cds.lpData = VarPtr(buf(1))
-  
-  send WM_COPYDATA, mhWndOwner, VarPtr(cds)
-  Set log = Me
-End Function
-Public Function toggleLog()
-  post VBA_LOGGING, 0&, 0&
-  mLogging = Not mLogging
-  toggleLog = mLogging
+Public Function activateTarget()
+  post WM_SYSCOMMAND, SC_DEFAULT, 0&
+Set activateTarget = Me
 End Function
 Public Function closeWindow()
   post WM_CLOSE, 0&, 0&
+  mhWndTarget = 0
 End Function
-Public Function clear()
-  post VBA_CLEAR, 0&, 0&
-  Set clear = Me
+Public Function focusHost()
+'  SetFocus mhWndOwner
+  post VBA_REQ_FOREGROUND, mhWndOwner, 0&
+  focusHost = Hex(mhWndOwner)
 End Function
-Public Function activateHost()
-  PostMessage mhWndOwner, WM_SETFOCUS, 0&, 0&
-  Set activateHost = Me
+'/////////////////////////////////////////////////////////////////////////////////////////////////////
+'// public utilities                                                                               //
+'/////////////////////////////////////////////////////////////////////////////////////////////////////
+Public Function memCopy(dest As Byte, ByVal content As String)
+Const pName As String = "cWin32.memCopy"
+  Call CopyMemory(dest, ByVal content, Len(content))
+End Function
+'/////////////////////////////////////////////////////////////////////////////////////////////////////
+'// Messages                                                                                        //
+'/////////////////////////////////////////////////////////////////////////////////////////////////////
+Public Function post(msg As LongPtr, p1 As LongPtr, p2 As LongPtr)
+Const pName As String = "cWin32.post"
+Dim db As New cDebugReporter
+    db.ToImmediate = True
+    db.localEnabled (LogMode)
+    db.Report caller:=pName, message:="msg: " & msg
+    
+  PostMessage mhWndTarget, msg, p1, p2
+  dllErr msg, p1, p2
+  Set post = Me
+  db.ExitMessage = mlastError
+  
+End Function
+Public Function send(msg As LongPtr, p1 As LongPtr, p2 As LongPtr)
+Const pName As String = "cWin32.send"
+Dim db As New cDebugReporter
+    db.ToImmediate = True
+    db.localEnabled (LogMode)
+    db.Report caller:=pName, message:="msg: " & msg
+    
+  SendMessage mhWndTarget, msg, p1, p2
+  dllErr msg, p1, p2
+  Set send = Me
+  db.ExitMessage = mlastError
+  
+End Function
+
+'/////////////////////////////////////////////////////////////////////////////////////////////////////
+'// Logging                                                                                         //
+'/////////////////////////////////////////////////////////////////////////////////////////////////////
+
+Public Function log(content As String)
+Const pName As String = "cWin32.log"
+Dim db As New cDebugReporter
+    db.ToImmediate = True
+    db.localEnabled (LogMode)
+    db.Report caller:=pName, context:=content
+Dim cds As COPYDATASTRUCT
+Dim cdsBuf(1 To 255) As Byte
+
+  Call CopyMemory(cdsBuf(1), ByVal content, Len(content))
+  cds.dwData = 0
+  cds.cbData = Len(content) + 1 ' add 1 to include a null to terminate the string
+  cds.lpData = VarPtr(cdsBuf(1))
+  
+  send WM_COPYDATA, mhWndOwner, VarPtr(cds)
+  Set log = Me
+  
 End Function
 Public Function EOF()
-  post VBA_EOF, 0&, 0&
+  send WM_COPYDATA, mhWndOwner, VarPtr(Null)
 End Function
+Public Property Get LastError() As String
+  LastError = mlastError
+End Property
+Public Function throwIfError()
+  If mlastError <> "" Then
+    Err.Raise vbObjectError + 100, "cWin32", mlastError
+  End If
+End Function
+'/////////////////////////////////////////////////////////////////////////////////////////////////////
+'// Private functions                                                                               //
+'/////////////////////////////////////////////////////////////////////////////////////////////////////
+
+Private Function getHwnd(title As String) As LongPtr
+  getHwnd = FindWindow(vbNullString, title)
+End Function
+Private Sub dllErr(Optional msg As Long, Optional wParam As LongPtr, Optional lParam As Long)
+Const pName As String = "cWin32.dllErr"
+Dim errCode As Long
+  errCode = Err.LastDllError
+  If errCode <> 0 Then
+    mlastError = hwndX & " : msg: " & Hex(msg) & " wParam: " & Hex(wParam) & " lParam: " & Hex(lParam) & _
+                  " : " & GetSystemErrorMessageText(errCode)
+    Err.Raise vbObjectError + 100, "cWin32", mlastError
+  Else
+    mlastError = ""
+  End If
+End Sub
 Private Function GetSystemErrorMessageText(ErrorNumber As Long) As String
 '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' GetSystemErrorMessageText
@@ -210,10 +290,6 @@ Private Function GetSystemErrorMessageText(ErrorNumber As Long) As String
     End If
     
 End Function
-
-'/////////////////////////////////////////////////////////////////////////////////////////////////////
-'// Private functions                                                                               //
-'/////////////////////////////////////////////////////////////////////////////////////////////////////
 Private Function getCaption(W As Variant) As String
   If W <> vbNullString Then
     getCaption = IIf(TypeOf W Is Object , W.Caption, _
@@ -239,10 +315,22 @@ Private Function TrimToNull(Text As String) As String
 End Function
 
 Private Sub Class_Initialize()
-  mLogging = True
+Const pName As String = "cWin32.Class_Initialize"
+    Set db = New cDebugReporter
+    db.persist
+    db.ToImmediate = True
+    db.transport = Text
+    db.Report caller:=myName
+    
+    mLogging = True
+  
 '  h = FindWindow("wndclass_desked_gsk", vbNullString)
 '  h = FindWindowEx(h, 0&, "XLDESK", vbNullString)
 '  h = FindWindowEx(h, 0&, "EXCEL7", vbNullString)
   mhWndOwner = FindWindow("XLMAIN", vbNullString)
   If mhWndOwner = 0 Then Err.Raise vbObjectError + 1, myName, "Cannot find main excel window"
+End Sub
+
+Private Sub Class_Terminate()
+  db.ExitMessage = myName & " terminating " & hwndX
 End Sub
