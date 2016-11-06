@@ -19,6 +19,7 @@ Const VBA_CLEAR As Long = &H404
 Const loggerCaption As String = "VBA Debug Log"
 Const message As String = "Test Message Content Test Message"
 Const Namespace = ">HOOK_"
+Private WithEvents mApp As Application
 Private mLogging As Boolean
 '/////////////////////////////////////////////////////////////////////////////////////////////////////
 '// testing                                                                                        //
@@ -47,10 +48,11 @@ Dim db As New cDebugReporter
     Set gDispatcher = New cWin32
     gDispatcher.hook loggerCaption
   End If
-  gDispatcher.activateTarget
+  gDispatcher.focusTarget
   testLoopInner
   
-  If gDispatcher.Hooked Then gDispatcher.EOF
+  If gDispatcher Is Nothing Then Exit Sub
+  If gDispatcher.Hooked Then flush
 End Sub
 '/////////////////////////////////////////////////////////////////////////////////////////////////////
 '// remote logger                                                                                       //
@@ -60,14 +62,37 @@ Public Function toggleLog() As Boolean
   mLogging = Not mLogging
   toggleLog = mLogging
 End Function
-Sub setTransport()
-Const pName As String = "cLogger.setTransport"
+Property Get sTransport() As Range
+  Set sTransport = Worksheets("run").Range("sTransport")
+End Property
+Property Get Transport() As Integer
+  Transport = Worksheets("run").Range("Transport").Value2
+End Property
+Sub synctTransport()
+Const pName As String = "cLogger.synctTransport"
 Dim db As New cDebugReporter
+    db.ToImmediate = True
     db.Report caller:=pName
-Dim t As eTransport: t = Worksheets("run").Range("Transport").Value2
-  config VBA_TRANSPORT, t, gDispatcher.hWndOwner
+    
+  flush
+
+Dim t As eTransport: t = Transport
+  config VBA_TRANSPORT, t
   gTransport = t
+    
+  db.Report "gTransport set to " & sTransport.Value2
+  
 End Sub
+Public Function flush()
+Const pName As String = "cLogger.flush"
+Dim db As New cDebugReporter
+    db.ToImmediate = True
+    db.Report caller:=pName
+    
+  gDispatcher.EOF
+  
+  db.ExitMessage = Array("text", "json")(gTransport)
+End Function
 Sub closeLog()
 Const pName As String = "cLogger.closeLog"
 Dim db As New cDebugReporter
@@ -87,32 +112,21 @@ Const pName As String = "cLogger.launchRemoteLogger"
 Dim db As New cDebugReporter
     db.ToImmediate = True
     db.Report caller:=pName
-Dim logH As LongPtr
-Dim xlH As LongPtr
 
-  logH = Shell( _
+  Call Shell( _
     "C:\Users\Admin\Documents\Visual Studio 2013\Projects\vba-debug-client\vba-debug-client\bin\Release\vba-debug-client.exe", vbNormalNoFocus)
   
-  hookRemoteLogger
-  DoEvents
+  hookRemoteLogger 1000
   
-  xlH = gDispatcher.focusHost
-  
-  DoEvents
-  
-  db.ExitMessage = "Host: 0x" & xlH & " DLL error state: " & gDispatcher.LastError
-    
 End Sub
-Function hookRemoteLogger()
+Function hookRemoteLogger(Optional maxRetries As Integer = 1000)
 Const pName As String = "cLogger.hookRemoteLogger"
 Dim db As New cDebugReporter
     db.ToImmediate = True
     db.Report caller:=pName
-Dim wsh As Object
-Set wsh = VBA.CreateObject("WScript.Shell")
-Dim waitOnReturn As Boolean: waitOnReturn = True
 Dim windowStyle As Integer: windowStyle = 1
 Dim retries As Integer: retries = 0
+Dim xlH As String
 
   If gDispatcher Is Nothing Then Set gDispatcher = New cWin32
   
@@ -122,30 +136,40 @@ Dim retries As Integer: retries = 0
     gDispatcher.hook loggerCaption
     DoEvents
     retries = retries + 1
-  Loop While Not gDispatcher.Hooked And retries < 1000
+  Loop While Not gDispatcher.Hooked And retries < maxRetries
   db.Report "waiting for window " & gDispatcher.hwndX & " retries: " & retries
   
+  If Hooked Then
   'poll until the window is constructed and receiving messages
-  Do
-    setTransport
-    DoEvents
-    retries = retries + 1
-  Loop While gDispatcher.LastError <> "" And retries < 1000
-  db.Report "waiting to send messages " & retries
+    retries = 0
+    Do
+      synctTransport
+      DoEvents
+      retries = retries + 1
+    Loop While gDispatcher.LastError <> "" And retries < maxRetries
+    db.Report "waiting to send messages " & retries
+  End If
   
-  Set hookRemoteLogger = Me
+  ' bring the focus back to excel
+  DoEvents
+  xlH = gDispatcher.focusHost
+  DoEvents
+  
+  db.ExitMessage = "Host: 0x" & xlH & " DLL error state: " & gDispatcher.LastError
+  
+  hookRemoteLogger = Hooked And retries < maxRetries
 End Function
 Sub config(msg As Long, wParam As Long, Optional lParam As Long = 0&)
 Const pName As String = "cLogger.config"
 Dim db As New cDebugReporter
     db.ToImmediate = True
     db.Report caller:=pName, message:="msg: " & msg
-
+  
   gDispatcher _
     .post(msg, wParam, lParam) _
-    .activateTarget
-    
-  AppActivate ThisWorkbook.Application.Caption
+    .focusTarget
+  DoEvents
+  gDispatcher.focusHost
     
 End Sub
 Function Hooked() As Boolean
@@ -158,20 +182,27 @@ End Function
 '/////////////////////////////////////////////////////////////////////////////////////////////////////
 '// UI                                                                                         //
 '/////////////////////////////////////////////////////////////////////////////////////////////////////
-Private Function isTransport(target As Range) As Boolean
-  isTransport = target = Worksheets("run").Range("stransport")
-  If isTransport Then setTransport
-End Function
-Private Sub mWs_Change(ByVal target As Range)
-  isTransport target
+Private Sub isTransport(Target As Range)
+  If Target = sTransport Then
+    synctTransport
+    Exit Sub
+  End If
+End Sub
+Private Sub mWs_Change(ByVal Target As Range)
+  isTransport Target
+End Sub
+Private Sub mWs_SelectionChange(ByVal Target As Range)
+  If Not Intersect(Target, Worksheets("run").Range("transports")) Is Nothing Then
+    sTransport.Value2 = Target.Value2
+  End If
 End Sub
 Sub toggleLogging()
   Dim button As Object
   Set button = mWs.Shapes(Namespace & "logging")
   If toggleLog() Then
-    button.DrawingObject.Caption = "Logging"
-  Else
     button.DrawingObject.Caption = "Paused"
+  Else
+    button.DrawingObject.Caption = "Logging"
   End If
 End Sub
 ' action callbacks for msForma controls onAction macro
@@ -194,7 +225,11 @@ Const pName As String = "cLogger.clear"
 Dim db As New cDebugReporter
     db.ToImmediate = True
     db.Report caller:=pName
-  gDispatcher.post(VBA_CLEAR, 0&, 0&).activateTarget
+  If Not gDispatcher Is Nothing Then
+    gDispatcher.post(VBA_CLEAR, 0&, 0&).focusTarget
+    DoEvents
+    gDispatcher.focusHost
+  End If
 End Sub
 Sub shutDown()
 Const pName As String = "cLogger.shutDown"
@@ -209,7 +244,9 @@ Dim db As New cDebugReporter
     db.ToImmediate = True
     db.Report caller:=pName
   If TypeName(gDispatcher) = "Empty" Then hookRemoteLogger
+  If Not gDispatcher Is Nothing Then gDispatcher.focusTarget
   testLoop
+  gDispatcher.focusHost
 End Sub
 Public Sub route(controlName As String)
 Const pName As String = "cLogger.route"
@@ -255,10 +292,11 @@ Const pName As String = "cLogger.Class_Initialize"
 Dim db As New cDebugReporter
     db.ToImmediate = True
     db.Report caller:=pName
+    
   Set mWs = ActiveSheet
   Set Controls = New clColFormControls
   Controls.Namespace(Namespace).Connect "controlEvent"
-  launchRemoteLogger
+  db.Report "Controls built"
   
 End Sub
 Private Sub Class_Terminate()
@@ -266,6 +304,9 @@ Const pName As String = "cLogger.Class_Terminate"
 Dim db As New cDebugReporter
     db.ToImmediate = True
     db.Report caller:=pName
+  
+  closeLog
+  
   db.Report "cLogger Terminating "
   db.ExitMessage = "gDispatcher state: " & gDispatcher.LastError
 End Sub

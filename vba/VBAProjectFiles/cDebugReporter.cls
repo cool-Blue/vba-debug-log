@@ -170,7 +170,7 @@ Attribute Report.VB_UserMemId = 0
         myContext = mContext
     End If
     
-    msgDict("context") = mContext
+    msgDict("context") = myContext
     
     ' log elapsed time since previous report unless END report
     ' for END report, log total procedure time
@@ -255,7 +255,7 @@ Attribute Report.VB_UserMemId = 0
     End If
     
     ' direct output
-    Select Case transport
+    Select Case Transport
     Case Text
       output = logtext
     Case json
@@ -321,11 +321,15 @@ End Property
 Property Get ToImmediate() As Boolean
   ToImmediate = mToImmediate Or gToImmediate()
 End Property
-Property Let transport(t As eTransport)
+Property Let Transport(t As eTransport)
   mTransport = t
 End Property
-Property Get transport() As eTransport
-  If mTransport = eTransport.noop Then transport = gTransport Else transport = mTransport
+Property Get Transport() As eTransport
+  If mTransport = eTransport.noop Then
+    Transport = gTransport
+  Else
+    Transport = mTransport
+  End If
 End Property
 Property Let context(RHS As String)
     mContext = RHS

@@ -45,6 +45,10 @@ If osh Is Nothing Then Set mSh = ActiveSheet Else Set mSh = osh
     Set Connect = Me
 End Function
 Public Function Namespace(Optional ns As Variant) As Variant
+Const pName As String = "clColFormControls.Namespace"
+Dim db As New cDebugReporter
+    db.ToImmediate = True
+    db.Report caller:=pName
   If IsMissing(ns) Then
     Namespace = mNamespace
   Else
@@ -63,6 +67,10 @@ Sub onAction(source)
   CallByName mClient, source, VbMethod
 End Sub
 Private Sub Class_Initialize()
+Const pName As String = "clColFormControls.Class_Initialize"
+Dim db As New cDebugReporter
+    db.ToImmediate = True
+    db.Report caller:=pName
 '   Manage the Collection
     Set mcolFormEvents = New Collection
     mCallBack = ""
@@ -70,6 +78,10 @@ End Sub
 
 
 Private Sub Class_Terminate()
+Const pName As String = "clColFormControls.Class_Terminate"
+Dim db As New cDebugReporter
+    db.ToImmediate = True
+    db.Report caller:=pName
 '   Manage the Collection
     Set mcolFormEvents = Nothing
 

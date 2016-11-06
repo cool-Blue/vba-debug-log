@@ -13,6 +13,7 @@ Public Enum eTransport
   json
 End Enum
 
+
 Public Const gcDebugMode As Boolean = True
 Public Const gdebugOutTo As Long = eLogTo.toFile
 Public gCallDepth As Long

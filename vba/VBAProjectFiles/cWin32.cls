@@ -131,6 +131,8 @@ Property Get hwndX() As String
   hwndX = "0x" & Hex(mhWndTarget)
 End Property
 Property Get hWndOwner() As LongPtr
+  mhWndOwner = FindWindow("XLMAIN", vbNullString)
+  If mhWndOwner = 0 Then Err.Raise vbObjectError + 1, myName, "Cannot find main excel window"
   hWndOwner = mhWndOwner
 End Property
 Property Get Hooked() As Boolean
@@ -141,18 +143,32 @@ Const pName As String = "cWin32.hook"
   mhWndTarget = getHwnd(t)
   Set hook = Me
 End Function
-Public Function activateTarget()
-  post WM_SYSCOMMAND, SC_DEFAULT, 0&
-Set activateTarget = Me
+Public Function focusTarget()
+Const pName As String = "cWin32.focusTarget"
+Dim db As New cDebugReporter
+    db.ToImmediate = True
+    db.Report caller:=pName
+'  post WM_SYSCOMMAND, SC_DEFAULT, 0&
+  SetForegroundWindow hWnd
+  
+  db.ExitMessage = LastError
+  
+Set focusTarget = Me
 End Function
 Public Function closeWindow()
   post WM_CLOSE, 0&, 0&
   mhWndTarget = 0
 End Function
-Public Function focusHost()
+Public Function focusHost() As String
+Const pName As String = "cWin32.focusHost"
+Dim db As New cDebugReporter
+    db.ToImmediate = True
+    db.Report caller:=pName
 '  SetFocus mhWndOwner
-  post VBA_REQ_FOREGROUND, mhWndOwner, 0&
-  focusHost = Hex(mhWndOwner)
+  post VBA_REQ_FOREGROUND, hWndOwner, 0&
+  focusHost = Hex(hWndOwner)
+  DoEvents
+  db.ExitMessage = "0x" & Hex(mhWndOwner) & vbTab & Hex(Application.hWnd)
 End Function
 '/////////////////////////////////////////////////////////////////////////////////////////////////////
 '// public utilities                                                                               //
@@ -213,12 +229,12 @@ Dim cdsBuf(1 To 255) As Byte
   Set log = Me
   
 End Function
-Public Function EOF()
-  send WM_COPYDATA, mhWndOwner, VarPtr(Null)
-End Function
 Public Property Get LastError() As String
   LastError = mlastError
 End Property
+Public Function EOF()
+  send WM_COPYDATA, mhWndOwner, VarPtr(Null)
+End Function
 Public Function throwIfError()
   If mlastError <> "" Then
     Err.Raise vbObjectError + 100, "cWin32", mlastError
@@ -319,7 +335,7 @@ Const pName As String = "cWin32.Class_Initialize"
     Set db = New cDebugReporter
     db.persist
     db.ToImmediate = True
-    db.transport = Text
+    db.Transport = Text
     db.Report caller:=myName
     
     mLogging = True
