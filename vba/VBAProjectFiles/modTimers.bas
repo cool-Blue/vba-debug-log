@@ -6,6 +6,12 @@ Option Base 1
 '
 ' WinApi declarations
 '
+'
+' sleep
+'
+Public Declare PtrSafe Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As LongPtr) 'For 64 Bit Systems
+
+'
 ' microtimer
 '
 Private Declare Function getFrequency Lib "kernel32" Alias _

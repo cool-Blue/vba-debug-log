@@ -7,7 +7,7 @@ Attribute VB_GlobalNameSpace = False
 Attribute VB_Creatable = False
 Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = True
-'Option Explicit
+Option Explicit
 '//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 '/ Maintains a global call stack
 '/ Requires
@@ -144,8 +144,6 @@ Attribute Report.VB_UserMemId = 0
     Dim output As String
     Dim printed As Boolean
     
-    msgDict("message") = message
-    
     Dim errorMessage As String
     If Err.Number <> 0 Then
         errorMessage = "ERROR: " & Err.Number & ": " & Err.Description
@@ -156,14 +154,13 @@ Attribute Report.VB_UserMemId = 0
     If Len(caller) <> 0 Then mCaller = caller
     
     msgDict("caller") = mCaller
-    msgDict("edge") = logEdge.logReport
+    msgDict("edge") = IIf(mFirstReport, logEdge.callProc, logEdge.logReport)
     
-    ' automatically creat context for START report
+    ' automatically create context for START report
     ' otherwise use passed in context if any
     If Len(context) = 0 Then
         If mFirstReport And Len(caller) > 0 Then
             myContext = "START"
-            msgDict("edge") = logEdge.callProc
         End If
     Else
         mContext = context
@@ -171,6 +168,10 @@ Attribute Report.VB_UserMemId = 0
     End If
     
     msgDict("context") = myContext
+    msgDict("message") = message
+    msgDict("error") = errorMessage
+    msgDict("callDepth") = callDepth
+
     
     ' log elapsed time since previous report unless END report
     ' for END report, log total procedure time
@@ -216,23 +217,23 @@ Attribute Report.VB_UserMemId = 0
         
     If Len(dt) <> 0 Then
       If Len(errorMessage) <> 0 Then
+        ' logtext
+        ' timestamp:**ERRORMESSAGE <tab to dt column>dt
         errorMessage = sysTime & String(callDepth, "*") & errorMessage
         errorMessage = errorMessage & setCol(errorMessage, dt, mDTCOL)
         logtext = logtext & vbNewLine & errorMessage
       Else
+        ' logtext <tab to dt column>dt
         logtext = logtext & setCol(logtext, dt, mDTCOL)
       End If
     Else
       If Len(errorMessage) <> 0 Then
+        ' logtext
+        ' timestamp:**ERRORMESSAGE
         errorMessage = sysTime & String(callDepth, "*") & errorMessage
         logtext = logtext & vbNewLine & errorMessage
       End If
     End If
-    
-    msgDict("message") = message
-    msgDict("error") = errorMessage
-    msgDict("callDepth") = callDepth
-
             
     Select Case newLine
     Case Before
@@ -292,16 +293,13 @@ Sub logFallback(ByRef printed As Boolean, logtext As String)
 End Sub
 Sub writeToFile(logtext As String, newLine As eNewLine)
 
-  If Not TypeName(debugLog) = "Empty" Then
-    If Not debugLog Is Nothing Then
-      If (newLine = Before Or newLine = both) Then debugLog.writeLine
-      debugLog.writeLine logtext
-      If (newLine = after Or newLine = both) Then debugLog.writeLine
-    Else
+  If Not gDebugLog Is Nothing Then
+      If (newLine = Before Or newLine = both) Then gDebugLog.writeLine
+      gDebugLog.writeLine logtext
+      If (newLine = after Or newLine = both) Then gDebugLog.writeLine
+  Else
       Err.Raise "logstream not initialised"
-    End If
   End If
-  Exit Sub
     
 End Sub
 Private Function toJson(msgDict As Dictionary) As String
@@ -370,6 +368,10 @@ Private Sub Class_Terminate()
   Report context:="END", message:=ExitMessage
   startTime = MicroTimer
   If mCalldepth < 0 Then gCallDepth = gCallDepth - 1
+  
+  If Not mToImmediate And Not gDispatcher Is Nothing Then
+    If gDispatcher.Hooked Then gDispatcher.EOF
+  End If
 End Sub
 
 

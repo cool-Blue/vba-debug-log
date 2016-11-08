@@ -1,4 +1,5 @@
 Attribute VB_Name = "main"
+Option Explicit
 Dim gLogger As cLogger
 Dim ws As Worksheet
 Sub controlEvent()
@@ -29,7 +30,4 @@ Dim db As New cDebugReporter
   End If
   Set ws = ActiveSheet
   
-End Sub
-Sub testFocus()
-  gDispatcher.focusHost
 End Sub

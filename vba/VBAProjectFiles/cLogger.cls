@@ -192,9 +192,18 @@ Private Sub mWs_Change(ByVal Target As Range)
   isTransport Target
 End Sub
 Private Sub mWs_SelectionChange(ByVal Target As Range)
+  On Error GoTo exitEnabled
+  Application.EnableEvents = False
   If Not Intersect(Target, Worksheets("run").Range("transports")) Is Nothing Then
     sTransport.Value2 = Target.Value2
+    sTransport.Activate
+    Sleep 50
+    synctTransport
+    DoEvents
+    Target.Activate
   End If
+exitEnabled:
+  Application.EnableEvents = True
 End Sub
 Sub toggleLogging()
   Dim button As Object
@@ -260,25 +269,24 @@ End Sub
 '/////////////////////////////////////////////////////////////////////////////////////////////////////
 ' Manages lifecycle of an output file for the db logger.
 ' Ascociated with a button called logToFile
-' If there is a debugLog object defined, in scope, then, if it is not initialised,
+' If there is a gDebugLog object defined, in scope, then, if it is not initialised,
 ' initialise it to a new file at \debuglog.txt.  Otherwise set it to nothing to
 ' dissable logging to file.
 Sub initFile()
 Static state As Boolean
 Dim button As Object
+
   Set button = mWs.Shapes(Namespace & "logToFile")
   On Error GoTo onErr
-  If Not TypeName(debugLog) = "Empty" Then
-    If debugLog Is Nothing Then
-      Dim fso As Object
-      Set fso = CreateObject("Scripting.FileSystemObject")
-      Set debugLog = fso.CreateTextFile(ActiveWorkbook.Path & "\debuglog.txt")
-      button.DrawingObject.Caption = "Loging to file"
-    Else
-      debugLog.Close
-      Set debugLog = Nothing
-      button.DrawingObject.Caption = "Log to file"
-    End If
+  If gDebugLog Is Nothing Then
+    Dim fso As Object
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    Set gDebugLog = fso.CreateTextFile(ActiveWorkbook.Path & "\debuglog.txt")
+    button.DrawingObject.Caption = "Loging to file"
+  Else
+    gDebugLog.Close
+    Set gDebugLog = Nothing
+    button.DrawingObject.Caption = "Log to file"
   End If
   Exit Sub
 onErr:

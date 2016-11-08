@@ -20,7 +20,7 @@ Public gCallDepth As Long
 Public gDebugMargin As Boolean
 'Public glogFile As cTextStream
 Public gSavState(0 To 255) As Byte
-Public debugLog As Object
+Public gDebugLog As Object
 
 Public gTransport As eTransport
 
